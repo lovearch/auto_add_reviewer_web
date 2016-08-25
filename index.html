@@ -29,22 +29,63 @@
     const GET_FILE_NAME = 'reviewers.json';
     const PRIVATE_TOKEN = 'SPsGDctTSTcgsAofkQ-z';
 
-    var originContent='';
+    const PARAMS = {
+        private_token: PRIVATE_TOKEN,
+        ref: BRANCH,
+        file_path: GET_FILE_NAME
+    };
+
+    var originContent = '';
     var selectBranch = '';
+    var curContent = '';
+
+    var addBranchModalFunc = null;
+    var addReviewerModalFunc = null;
+    var saveJsonDataFunc = null;
 
 
-    $('#myModalCommit').click(()=> {
-        let [nameCtrl, emailCtrl] = [$('#myModalName'), $('#myModalEmail')];
-        let [textName, textEmail] = [nameCtrl.val().trim(), emailCtrl.val().trim()];
-        if (textEmail !== '') {
-          $('#myModal').modal('hide');
-          nameCtrl.val('');
-          emailCtrl.val('');
-          alert(textEmail);
+    $('#addReviewerModalCommit').click(()=>{
+      let nameCtrl = $('#addReviewerModalName');
+      let emailCtrl = $('#addReviewerModalEmail');
+      let textName = nameCtrl.val().trim();
+      let textEmail = emailCtrl.val().trim();
+      if(textEmail !== ''){
+        nameCtrl.val('');
+        emailCtrl.val('');
+        addReviewerModalFunc(textName, textEmail);
+      }else{
+        alert('输入不能为空,请重新输入!');
+      }
+    });
+
+
+
+    $('#addBranchModalCommit').click(()=>{
+      let branchCtrl = $('#addBranchModalBranchName');
+      let textBranchName = branchCtrl.val().trim();
+      if(textBranchName !== ''){
+        addBranchModalFunc(textBranchName);
+      }else{
+        alert('输入不能为空,请重新输入!');
+      }
+    });
+
+
+    /** Gitlab相关变量*/
+    var gitlabCommitFunc = null;
+    /** Gitlab提交信息模态框*/
+    $('#commitModalOk').click((event)=> {
+        event.preventDefault();
+        let logCtrl = $('#commitModalLog');
+        let log = logCtrl.val().trim();
+        if (log === '') {
+            alert('提交日志不能为空,请重新输入!');
         } else {
-            alert('输入不能为空,请重新输入!');
+            //log不为空,则提交修改
+            gitlabCommitFunc(curContent, log);
         }
     });
+
 
     /**
      * 定义主页面
@@ -59,17 +100,18 @@
             };
         },
 
-        componentDidMount() {
+        componentDidMount: function() {
             this.loadData();
         },
 
         render: function () {
-            return (<div className='container container-fluid'>
-                <MenuView />
-                <FlowView success={this.state.success}
-                          loading={this.state.loading}
-                          response={JSON.parse(this.state.response)}/>
-            </div>);
+          if (this.state.loading) {
+              return <span>正在加载...</span>;
+          }
+          if (this.state.success) {
+            return (<FlowView
+              data={JSON.parse(this.state.response)}/>);
+          }
         },
 
         onFileChange: function () {
@@ -82,12 +124,7 @@
                 loading: true,
                 success: false,
             });
-            let params = {
-                private_token: `${PRIVATE_TOKEN}`,
-                ref: BRANCH,
-                file_path: `${GET_FILE_NAME}`
-            };
-            $.getJSON(URL_GITLAB_FILE, params, (response)=> {
+            $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
                 let content = response.content;
                 if (response.encoding && response.encoding === 'base64') {
                     content = window.atob(content);
@@ -110,22 +147,143 @@
 
     });
 
-    var MenuView = React.createClass({
-      handleAddBranch: function(){
-        console.log("add branch");
-      },
-      handleAddReviewer: function(){
-        console.log("add reviewer");
+    var SaveJsonDataView = React.createClass({
+      componentDidMount() {
+          gitlabCommitFunc = this.jsonSaveCommit;
       },
       render: function(){
-        return (<div className='container row'>
-        <a href="#myModal" role="button" className="btn btn-default" data-toggle="modal"> test </a>
-<button className="btn btn-default" >分支</button>
-<button className="btn btn-default"  >工程</button>
-<button className="btn btn-default" onClick={this.handleAddBranch}>添加分支</button>
-<button className="btn btn-default" onClick={this.handleAddReviewer}>添加Reviewer</button>
-        </div>);
+        return(<button onClick={this.onJsonSave}
+          className="btn btn-default">提交修改</button>);
       },
+      /** 点击提交按钮*/
+      onJsonSave: function (event) {
+          event.preventDefault();
+          //生成json字符串
+          curContent = JSON.stringify(this.props.data, null, 2);
+          console.log(curContent);
+          this.judgeModalDialog(curContent);
+      },
+
+      /** 判断是否弹出模态对话框**/
+      judgeModalDialog: function (curContent) {
+
+          //判断是否有修改,没有修改则不需要提交
+          if (curContent === originContent) {
+              alert('没有任何修改,无需提交!');
+              return
+          }
+
+          $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
+              let content = response.content;
+              if (response.encoding && response.encoding === 'base64') {
+                  content = window.atob(content);
+              }
+              //为避免强制覆盖,判断在修改过程中远程文件是否发生变化
+              if (content !== originContent) {
+                  if (confirm('远程文件已发生改动,是否丢弃修改并载入最新版本?')) {
+                      location.reload();
+                  }
+                  return
+              }
+              this.showCommitModal(curContent);
+          }, (error)=> {
+              alert(`网络出错[${error}]`);
+          });
+      },
+
+      /** 显示模态对话框*/
+      showCommitModal: function (curContent) {
+          //json与源进行diff计算
+          let diff = JsDiff.diffLines(originContent, curContent);
+          //获取diff显示区域
+          let diffPreview = document.getElementById('diffPreview');
+          //清空显示区域
+          diffPreview.textContent = '';
+          //显示diff内容
+          diff.forEach(function (part) {
+              let color = part.added ? 'GREEN' : part.removed ? 'RED' : '#778899';
+              let span = document.createElement('span');
+              span.style.color = color;
+              if (part.added || part.removed) {
+                  span.style.background = '#87CEFF';
+              }
+              span.appendChild(document.createTextNode(part.value));
+              diffPreview.appendChild(span);
+          });
+          //弹出模态对话框
+          $('#commitModalFileName').html(`修改的文件: ${GET_FILE_NAME}`);
+          $('#commitModal').modal();
+      },
+
+      /** 提交服务器*/
+      jsonSaveCommit: function (submitContent, log) {
+
+          /** 提交前先拉取服务器最新文件来做对比*/
+          $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
+              let content = response.content;
+              if (response.encoding && response.encoding === 'base64') {
+                  content = window.atob(content);
+              }
+              //为避免冲突,判断在修改过程中远程文件是否发生变化
+              if (content !== originContent) {
+                  if (confirm('远程文件已发生改动,是否丢弃修改并载入最新版本?')) {
+                      location.reload();
+                  }
+                  return
+              }
+
+              this.doAjaxCommit(submitContent, log);
+          }, (error)=> {
+              alert(`网络出错[${error}]`);
+          });
+      },
+
+      /** 真正做提交请求*/
+      doAjaxCommit: function (content, log) {
+
+          //组建提交参数
+          let params = {
+              private_token: PRIVATE_TOKEN,
+              branch_name: BRANCH,
+              file_path: GET_FILE_NAME,
+              encoding: 'text',
+              content: content,
+              commit_message: log
+          };
+          //Ajax做PUT提交
+          $.ajax({
+              type: 'PUT',
+              url: URL_GITLAB_FILE,
+              data: params,
+              success: function (data) {
+                  //提交成功后隐藏模态框,刷新页面
+                  alert('提交成功了!');
+                  let logCtrl = $('#commitModalLog');
+                  logCtrl.val('');
+                  $('#commitModal').modal('hide');
+                  location.reload();
+              },
+              error: function (msg) {
+                  let message = JSON.parse(msg.responseText).message;
+                  alert(`提交网络出错[${message}]`);
+              }
+          });
+      }
+
+    });
+
+    var MenuView = React.createClass({
+
+      render: function(){
+        return (<div className='container row'>
+        <button className="btn btn-default lrMargin" >分支</button>
+        <button className="btn btn-default lrMargin" >工程</button>
+        <a href="#addBranchModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加分支 </a>
+        <a href="#addReviewerModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加Reviewer </a>
+        <SaveJsonDataView
+        data={this.props.data}/>
+        </div>
+        )},
     });
 
 
@@ -141,40 +299,50 @@
             };
         },
 
-        render: function () {
-            if (this.props.loading) {
-                return <span>Loading...</span>;
-            }
-            if (this.props.success) {
-                let flowObj = this.props.response;
-                let showData = [];
-                for (let flowList in flowObj) {
-                    showData.push(flowList);
-                }
-                if (selectBranch === ''){
-                  selectBranch = showData[0];
-                }
-                let changed = this.state.changed;
-                return (<div style = {{paddingTop:10}}
-                   className='row'>
-                          <div className='col-xs-6 col-md-4'>
-                            <div>Branch name</div>
-                            <BranchList data={showData}
-                                      list={flowObj}
-                                      onBranchChange={this.onBranchChange}/>
-                          </div>
-                          <div className='col-xs-12 col-md-8'>
-                            <ContenReviewer list={flowObj}
-                                            onBranchChange={this.onBranchChange}
-                            />
-                          </div>
-                        </div>);
-            } else {
-                return <span>Read error!!!</span>;
-            }
+        componentDidMount: function() {
+          addBranchModalFunc = this.addBranchModalFunc;
         },
 
-        onBranchChange: function (data) {
+        addBranchModalFunc:function(branch_name){
+          this.props.data[branch_name] = {"CM":[], "PM":[]};
+          //this.props.onBranchChange();
+          this.onChange();
+        },
+
+        saveJsonDataFunc: function(){
+          console.log(this.props.data);
+        },
+
+        render: function () {
+                let flowObj = this.props.data;
+                let branchList = [];
+                for (let flowList in flowObj) {
+                    branchList.push(flowList);
+                }
+                if (selectBranch === ''){
+                  selectBranch = branchList[0];
+                }
+                let changed = this.state.changed;
+                return (
+                  <div className='container container-fluid'>
+                  <MenuView data={this.props.data}/>
+                  <div style = {{paddingTop:10}} className='row'>
+                          <div className='col-xs-6 col-md-4'>
+                            <div>分支列表</div>
+                            <BranchList data={branchList}
+                                      onBranchChange={this.onChange}/>
+                          </div>
+                          <div className='col-xs-12 col-md-8'>
+                          <div>Reviewer列表</div>
+                            <ContenReviewer list={this.props.data}
+                                            onReviewerChange={this.onChange}
+                            />
+                          </div>
+                        </div>
+                      </div>);
+        },
+
+        onChange: function (data) {
             this.setState({
                 changed: true,
             });
@@ -193,10 +361,6 @@
             };
         },
 
-        componentDidMount() {
-          //this.state.selectBranch = this.props.br;
-        },
-
         render: function () {
             console.log('select branch : ', selectBranch);
             return (<div className="btn-group-vertical" role="group">
@@ -212,17 +376,39 @@
 
         onClickBranch: function (event){
             //event.preventDefault();
-            //this.state.selectBranch = event.target.value
-            console.log('click branch:',event.target.value);
+            //console.log('click branch:',event.target.value);
             selectBranch = event.target.value;
             this.props.onBranchChange();
         },
+        onChange:function (){
+          this.setState({
+            'changed':true
+          });
+        }
     });
 
 
     var ContenReviewer = React.createClass({
         componentDidMount(){
+          addReviewerModalFunc = this.addReviewerModalFunc;
+        },
 
+        addReviewerModalFunc:function(name, email){
+          this.props.list[selectBranch]['PM'].push({'name':name,'email':email});
+          this.props.onReviewerChange();
+        },
+        delReviewerFunc:function(email){
+          console.log(email);
+          //this.props.onReviewerChange();
+          for(var pm in this.props.list[selectBranch]['PM']){
+            var pmObj = this.props.list[selectBranch]['PM'][pm];
+            console.log(pmObj);
+            if(pmObj['email'] == email){
+              this.props.list[selectBranch]['PM'].splice(pm, 1);
+              break;
+            }
+          }
+          this.props.onReviewerChange();
         },
 
         render: function() {
@@ -235,7 +421,8 @@
               </thead>
               <tbody>
               {this.props.list[selectBranch]['PM'].map((data)=>{
-                return (<tr><td>{data['name']}</td><td>{data['email']}</td><td><a className='link'>删除</a></td></tr>)
+                return (<tr><td>{data['name']}</td><td>{data['email']}</td>
+                <td><button className='btn btn-default' onClick={this.delReviewerFunc.bind( this, data['email']) }>删除</button></td></tr>)
               })}
               </tbody>
               </table>);
@@ -248,35 +435,95 @@
     ReactDOM.render(<MainView/>, document.getElementById('container'));
 
 </script>
-<!--批量操作模态框-->
-<div class="modal fade" id="myModal" tabindex="-1" role="dialog"
-     aria-labelledby="myModalLabel" aria-hidden="true">
+
+<!-- 加reviewer对话框 -->
+<div class="modal fade" id="addReviewerModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close"
-                        data-dismiss="modal" aria-hidden="true">
-                    &times;
-                </button>
-                <h4 class="modal-title" id="myModalLabel"></h4>
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="addREviewerModalLabel">模态框（Modal）标题</h4>
             </div>
-            <div class="modal-body" id="myModalContent">
-                姓名：<input type="text"
-                       class="form-control"
-                       id="myModalName"
-                       placeholder="姓名"/>
-               邮箱：<input type="text"
-                      class="form-control"
-                      id="myModalEmail"
-                      placeholder="魅族邮箱"/>
+            <div class="modal-body">
+              姓名：<input type="text"
+                     class="form-control"
+                     id="addReviewerModalName"
+                     placeholder="姓名"/>
+              邮箱：<input type="text"
+                    class="form-control"
+                    id="addReviewerModalEmail"
+                    placeholder="魅族邮箱"/>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default"
-                        data-dismiss="modal">取消
-                </button>
-                <button type="button" class="btn btn-primary" id="myModalCommit">
-                    确定
-                </button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="addReviewerModalCommit">提交更改</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
+<!-- 加Branch对话框 -->
+<div class="modal fade" id="addBranchModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title" id="addBranchModalLabel">添加分支</h4>
+            </div>
+            <div class="modal-body">
+              分支名：<input type="text"
+                     class="form-control"
+                     id="addBranchModalBranchName"
+                     placeholder="分支名"/>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="addBranchModalCommit">提交更改</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
+
+<!--提交模态框-->
+<div>
+    <div class="modal fade" id="commitModal" tabindex="-1" role="dialog"
+         aria-labelledby="commitModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close"
+                            data-dismiss="modal" aria-hidden="true">
+                        &times;
+                    </button>
+                    <h4 class="modal-title" id="commitModalLabel">
+                        提交修改
+                    </h4>
+                </div>
+                <div class="modal-body" style="padding-right:30px">
+                    <div>
+                        <label id="commitModalFileName"></label>
+                        <label>结果预览:</label>
+                    <pre id="diffPreview"
+                         style="width:100%;resize: none; text-align:left; overflow: auto; height: 320px">
+                    </pre>
+                    </div>
+                    <label>提交Log:</label>
+                    <textarea id="commitModalLog"
+                              class="form-control"
+                              style="width:100%;resize: none"
+                              placeholder="输入提交信息"
+                              rows="3"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default"
+                            data-dismiss="modal">取消
+                    </button>
+                    <button type="button" class="btn btn-primary"
+                            id="commitModalOk">
+                        提交
+                    </button>
+                </div>
             </div>
         </div>
     </div>
