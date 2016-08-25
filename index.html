@@ -330,6 +330,7 @@
                           <div className='col-xs-6 col-md-4'>
                             <div>分支列表</div>
                             <BranchList data={branchList}
+                                        list={this.props.data}
                                       onBranchChange={this.onChange}/>
                           </div>
                           <div className='col-xs-12 col-md-8'>
@@ -371,6 +372,7 @@
                   return (<button value={data} className='btn btn-default' onClick={this.onClickBranch}>{data}</button>)
                 }
               })}
+              <button className='btn btn-default' onClick={this.onClickDelBranch}>删除选中分支</button>
             </div>);
         },
 
@@ -380,6 +382,19 @@
             selectBranch = event.target.value;
             this.props.onBranchChange();
         },
+
+        onClickDelBranch:function(event){
+          for(var br in this.props.list){
+
+            console.log(br);
+            if(br == selectBranch){
+              delete this.props.list[br];
+              selectBranch='';
+            }
+          }
+          this.props.onBranchChange();
+        },
+
         onChange:function (){
           this.setState({
             'changed':true
