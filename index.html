@@ -26,18 +26,28 @@
     const URL_GITLAB_BASE = 'http://gitlab.meizu.com';
     const URL_GITLAB_BASE_API = `${URL_GITLAB_BASE}/api/v3`;
     const URL_GITLAB_FILE = `${URL_GITLAB_BASE_API}/projects/${PROJECT_ID}/repository/files`;
-    const GET_FILE_NAME = 'reviewers.json';
+    const GET_FILE_NAME_BRANCH = 'reviewers.json';
+    const GET_FILE_NAME_PROJECT = 'project_reviewers.json';
     const PRIVATE_TOKEN = 'SPsGDctTSTcgsAofkQ-z';
 
-    const PARAMS = {
+    const PARAMS_BRANCH = {
         private_token: PRIVATE_TOKEN,
         ref: BRANCH,
-        file_path: GET_FILE_NAME
+        file_path: GET_FILE_NAME_BRANCH
     };
+
+    const PARAMS_PROJECT = {
+      private_token: PRIVATE_TOKEN,
+      ref: BRANCH,
+      file_path: GET_FILE_NAME_PROJECT
+    };
+
+    var PARAMS = null;
 
     var originContent = '';
     var selectBranch = '';
     var curContent = '';
+    var tag = '';
 
     var addBranchModalFunc = null;
     var addReviewerModalFunc = null;
@@ -107,24 +117,57 @@
 
         getInitialState: function () {
             return {
-                loading: true,
+                selected:false,
+                loading: false,
                 response: null,
                 success: false,
             };
         },
 
         componentDidMount: function() {
-            this.loadData();
+            //this.loadData();
         },
 
         render: function () {
+          if(!this.state.selected){
+            return (<div className='container container-fluid'>
+              <div className='row'>
+              <button onClick={this.onBranchSelected} className="btn btn-lg btn-block btn-info" type="button">根据分支配置</button>
+              <button onClick={this.onProjectSelected} className="btn btn-lg btn-block btn-info" type="button">根据工程配置</button>
+              </div>
+            </div>)
+          }
           if (this.state.loading) {
-              return <span>正在加载...</span>;
+            return <span>正在加载...</span>;
           }
           if (this.state.success) {
             return (<FlowView
               data={JSON.parse(this.state.response)}/>);
           }
+        },
+
+        onBranchSelected: function(event){
+          this.setState({
+            selected : true,
+            response: null,
+            loading: true,
+            success: false,
+          });
+          tag = '分支';
+          PARAMS = PARAMS_BRANCH;
+          this.loadData();
+        },
+
+        onProjectSelected: function(event){
+          this.setState({
+            selected : true,
+            response: null,
+            loading: true,
+            success: false,
+          });
+          tag = '工程';
+          PARAMS = PARAMS_PROJECT;
+          this.loadData();
         },
 
         onFileChange: function () {
@@ -133,6 +176,7 @@
 
         loadData: function () {
             this.setState({
+                selected: true,
                 response: null,
                 loading: true,
                 success: false,
@@ -145,12 +189,14 @@
                 originContent = content;
                 //alert(originContent);
                 this.setState({
+                    selected : true,
                     response: content,
                     loading: false,
                     success: true,
                 });
             }, (error)=> {
                 this.setState({
+                    selected: true,
                     response: null,
                     loading: false,
                     success: false,
@@ -289,12 +335,9 @@
 
       render: function(){
         return (<div className='container row'>
-        <button className="btn btn-default lrMargin" >分支</button>
-        <button className="btn btn-default lrMargin" >工程</button>
-        <a href="#addBranchModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加分支 </a>
+        <a href="#addBranchModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加{tag} </a>
         <a href="#addReviewerModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加Reviewer </a>
-        <SaveJsonDataView
-        data={this.props.data}/>
+        <SaveJsonDataView data={this.props.data}/>
         </div>
         )},
     });
@@ -337,7 +380,7 @@
                   <MenuView data={this.props.data}/>
                   <div style = {{paddingTop:10}} className='row'>
                           <div className='col-xs-6 col-md-4'>
-                            <div>分支列表</div>
+                            <div>{tag}列表</div>
                             <BranchList data={branchList}
                                         list={this.props.data}
                                       onBranchChange={this.onChange}/>
@@ -381,7 +424,7 @@
                   return (<button value={data} className='btn btn-default' onClick={this.onClickBranch}>{data}</button>)
                 }
               })}
-              <button className='btn btn-default' onClick={this.onClickDelBranch}>删除选中分支</button>
+              <button className='btn btn-default' onClick={this.onClickDelBranch}>删除选中{tag}</button>
             </div>);
         },
 
@@ -440,7 +483,7 @@
             return (<table className='table table-bordered table-hover'>
               <thead>
               <tr>
-              <th>name</th><th>email</th><th>操作</th>
+              <th>姓名</th><th>邮箱</th><th>操作</th>
               </tr>
               </thead>
               <tbody>
