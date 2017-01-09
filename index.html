@@ -26,9 +26,9 @@
     const URL_GITLAB_BASE = 'http://gitlab.meizu.com';
     const URL_GITLAB_BASE_API = `${URL_GITLAB_BASE}/api/v3`;
     const URL_GITLAB_FILE = `${URL_GITLAB_BASE_API}/projects/${PROJECT_ID}/repository/files`;
-    const GET_FILE_NAME_BRANCH = 'reviewers.json';
+    const GET_FILE_NAME_BRANCH = 'branch_reviewers.json';
     const GET_FILE_NAME_PROJECT = 'project_reviewers.json';
-    const PRIVATE_TOKEN = 'SPsGDctTSTcgsAofkQ-z';
+    const PRIVATE_TOKEN = '1WU_88dJdCwbvWmi1-JL';
 
     const PARAMS_BRANCH = {
         private_token: PRIVATE_TOKEN,
@@ -45,7 +45,7 @@
     var PARAMS = null;
 
     var originContent = '';
-    var selectBranch = '';
+    var selectBranch = 'ALL';
     var curContent = '';
     var tag = '';
 
@@ -53,6 +53,9 @@
     var addReviewerModalFunc = null;
     var saveJsonDataFunc = null;
 
+    function b64_to_utf8(str) {
+        return decodeURIComponent(escape(window.atob(str)));
+    }
 
     $('#addReviewerModalCommit').click(()=>{
       let nameCtrl = $('#addReviewerModalName');
@@ -90,6 +93,22 @@
     $('#addBranchModalCommitFinish').click(()=>{
       $('#addBranchModalCommit').trigger("click");
       $('#addBranchModal').modal('hide');
+    });
+
+    $('#addProjectModalCommit').click(()=>{
+      let branchCtrl = $('#addProjectModalProjectName');
+      let textBranchName = branchCtrl.val().trim();
+      if(textBranchName !== ''){
+        branchCtrl.val('');
+        addBranchModalFunc(textBranchName);
+      }else{
+        alert('输入不能为空,请重新输入!');
+      }
+    });
+
+    $('#addProjectModalCommitFinish').click(()=>{
+      $('#addProjectModalCommit').trigger("click");
+      $('#addProjectModal').modal('hide');
     });
 
 
@@ -184,7 +203,7 @@
             $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
                 let content = response.content;
                 if (response.encoding && response.encoding === 'base64') {
-                    content = window.atob(content);
+                    content = b64_to_utf8(content);
                 }
                 originContent = content;
                 //alert(originContent);
@@ -235,7 +254,7 @@
           $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
               let content = response.content;
               if (response.encoding && response.encoding === 'base64') {
-                  content = window.atob(content);
+                  content = b64_to_utf8(content);
               }
               //为避免强制覆盖,判断在修改过程中远程文件是否发生变化
               if (content !== originContent) {
@@ -270,7 +289,7 @@
               diffPreview.appendChild(span);
           });
           //弹出模态对话框
-          $('#commitModalFileName').html(`修改的文件: ${GET_FILE_NAME}`);
+          $('#commitModalFileName').html(`修改的文件: ${PARAMS.file_path}`);
           $('#commitModal').modal();
       },
 
@@ -281,7 +300,7 @@
           $.getJSON(URL_GITLAB_FILE, PARAMS, (response)=> {
               let content = response.content;
               if (response.encoding && response.encoding === 'base64') {
-                  content = window.atob(content);
+                  content = b64_to_utf8(content);
               }
               //为避免冲突,判断在修改过程中远程文件是否发生变化
               if (content !== originContent) {
@@ -304,7 +323,7 @@
           let params = {
               private_token: PRIVATE_TOKEN,
               branch_name: BRANCH,
-              file_path: GET_FILE_NAME,
+              file_path: PARAMS.file_path,
               encoding: 'text',
               content: content,
               commit_message: log
@@ -335,7 +354,8 @@
 
       render: function(){
         return (<div className='container row'>
-        <a href="#addBranchModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加{tag} </a>
+		{tag=="工程" && <a href="#addProjectModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加工程</a>}
+		{tag=="分支" && <a href="#addBranchModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加分支</a>}
         <a href="#addReviewerModal" role="button" className="btn btn-default lrMargin" data-toggle="modal"> 添加Reviewer </a>
         <SaveJsonDataView data={this.props.data}/>
         </div>
@@ -371,9 +391,7 @@
                 for (let flowList in flowObj) {
                     branchList.push(flowList);
                 }
-                if (selectBranch === ''){
-                  selectBranch = branchList[0];
-                }
+
                 let changed = this.state.changed;
                 return (
                   <div className='container container-fluid'>
@@ -388,6 +406,7 @@
                           <div className='col-xs-12 col-md-8'>
                           <div>Reviewer列表</div>
                             <ContenReviewer list={this.props.data}
+                                            data={branchList}
                                             onReviewerChange={this.onChange}
                             />
                           </div>
@@ -417,6 +436,12 @@
         render: function () {
             //console.log('select branch : ', selectBranch);
             return (<div className="btn-group-vertical" role="group">
+            {
+              'ALL' == selectBranch && <button  value='ALL' className='btn btn-primary' onClick={this.onClickBranch}>所有{tag}</button>
+            }
+            {
+              'ALL' != selectBranch && <button value='ALL' className='btn btn-default' onClick={this.onClickBranch}>所有{tag}</button>
+            }
               {this.props.data.map((data)=>{
                 if(data === selectBranch){
                   return (<button  value={data} className='btn btn-primary' onClick={this.onClickBranch}>{data}</button>)
@@ -454,6 +479,20 @@
         }
     });
 
+    var ReviewerRow = React.createClass({
+      render:function(){
+        var emailList = [];
+        for(var pm in this.props.pmlist){
+          var pmObj = this.props.pmlist[pm];
+		  emailList.push(pmObj['name']+' [ '+pmObj['email'] + ' ]');
+        }
+        return (<tr><td>{this.props.name}</td><td>
+		{emailList.map((data)=>{
+			return (<div>{data}<br/></div>)
+		})}
+		</td></tr>);
+      }
+    });
 
     var ContenReviewer = React.createClass({
         componentDidMount(){
@@ -480,6 +519,24 @@
 
         render: function() {
           //return (<div>{this.props.list[selectBranch]['PM'][0]['email']}</div>);
+
+          if(selectBranch == "ALL"){
+            return (<table className='table table-bordered table-hover'>
+              <thead>
+              <tr>
+              <th>{tag}</th><th>姓名[邮箱]</th>
+              </tr>
+              </thead>
+              <tbody>
+              {this.props.data.map((data)=>{
+                return (<ReviewerRow
+                  name={data}
+                  pmlist={this.props.list[data]["PM"]}
+                  />)
+              })}
+              </tbody>
+              </table>);
+          } else{
             return (<table className='table table-bordered table-hover'>
               <thead>
               <tr>
@@ -493,6 +550,8 @@
               })}
               </tbody>
               </table>);
+          }
+
         },
     });
 
@@ -536,13 +595,13 @@
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title" id="addBranchModalLabel">添加分支</h4>
+				<h4 class="modal-title" id="addBranchModalLabel">添加分支</h4>
             </div>
             <div class="modal-body">
-              分支名：<input type="text"
+				分支名：<input type="text"
                      class="form-control"
                      id="addBranchModalBranchName"
-                     placeholder="分支名"/>
+					 placeholder="分支名"/>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
@@ -552,6 +611,30 @@
         </div><!-- /.modal-content -->
     </div><!-- /.modal -->
 </div>
+
+<!-- 加Project对话框 -->
+<div class="modal fade" id="addProjectModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+				<h4 class="modal-title" id="addProjectModalLabel">添加工程</h4>
+            </div>
+            <div class="modal-body">
+				工程名：<input type="text"
+                     class="form-control"
+                     id="addProjectModalProjectName"
+					 placeholder="工程名"/>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-default" id="addProjectModalCommitFinish">完成</button>
+                <button type="button" class="btn btn-primary" id="addProjectModalCommit">添加并继续</button>
+            </div>
+        </div><!-- /.modal-content -->
+    </div><!-- /.modal -->
+</div>
+
 
 
 <!--提交模态框-->
