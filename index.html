@@ -157,7 +157,13 @@
             </div>)
           }
           if (this.state.loading) {
-            return <span>正在加载...</span>;
+			return <div>
+			<span>正在加载...</span>
+			<p>如果一直在此界面，请按下面提示操作：</p>
+			<p>1.点击浏览器上面的地址栏目右边的小红叉</p>
+			<p><img src="./images/loadunsafe.png"/></p>
+			<p>2.在弹出菜单里面的　<u>Load unsafe scripts</u></p>
+			</div>;
           }
           if (this.state.success) {
             return (<FlowView
