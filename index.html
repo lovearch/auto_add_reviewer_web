@@ -33,13 +33,13 @@
     const PARAMS_BRANCH = {
         private_token: PRIVATE_TOKEN,
         ref: BRANCH,
-        file_path: GET_FILE_NAME_BRANCH
+        file_path: GET_FILE_NAME_BRANCH,
     };
 
     const PARAMS_PROJECT = {
       private_token: PRIVATE_TOKEN,
       ref: BRANCH,
-      file_path: GET_FILE_NAME_PROJECT
+      file_path: GET_FILE_NAME_PROJECT,
     };
 
     var PARAMS = null;
@@ -330,7 +330,6 @@
               private_token: PRIVATE_TOKEN,
               branch_name: BRANCH,
               file_path: PARAMS.file_path,
-              encoding: 'text',
               content: content,
               commit_message: log
           };
